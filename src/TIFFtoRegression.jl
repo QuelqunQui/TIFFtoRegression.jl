@@ -1,4 +1,4 @@
-module TIFF2Regression
+module TIFFtoRegression
 
 ############################################################################
 # Reading the values of the TIFF according to TIFF v0.6
@@ -735,5 +735,148 @@ end
 
 # Main function of Multiple Regression implementing ANOVA tests
 # and a user friendly approach to regression
+
+function MultiRegOpt(Xin::Vector, Yin::Vector, FunFamily="Poly"::String, p=3::Int64,Stepwise="None"::String, threshold=0.05::Float64)
+  n=length(Xin)
+  pVModels=[]
+  XMatArray=[]
+  BArray=[]
+  YhA=[]
+  XMatA=[]
+  pVarA=[]
+  XNameA=[]
+  NbrModelTested=0
+  if FunFamily=="Custom"
+    NbrModel=p
+    XMat=ones(Float64,n,NbrModel)
+    XName=[]
+    for Counti=0:NbrModel-1 # Nombre of function involved
+      if Counti==0
+        FX=ones(size(Xin))
+        push!(XName,"Constant")
+      else
+        Xout=NextFun(Xin,FunFamily,Counti)
+        FX=Xout[1]
+        push!(XName,Xout[2])
+      end
+      XMat[:,Counti+1]=FX
+    end
+    pVect,pModel,Bh=StatReg(Xin,Yin,XMat,XName,p)
+    # Stepwise, taking out not necessary variables
+    OldXMat=XMat
+    OldpVect=pVect
+    OldBh=Bh
+    OldXMat=XMat
+    OldpModel=pModel
+    while sum(pVect.>threshold)>0 && Stepwise=="Student"# There is pVect>0.05
+      i=findmax(pVect)[2] #eliminated fun
+      if (NbrModel-1)==0
+        println("Impossible to find a acceptable regression with given number of function for threshold=$threshold, First Result given")
+        XMat=OldXMat
+        pVect=OldpVect
+        Bh=OldBh
+        XMat=OldXMat
+        break
+      else
+        NewXMat=ones(Float64,n,NbrModel-1)
+        NewXName=[]
+        for j=1:NbrModel
+          if j<i
+            NewXMat[:,j]=XMat[:,j]
+            push!(NewXName,XName[j])
+          elseif j>i
+            NewXMat[:,j-1]=XMat[:,j]
+            push!(NewXName,XName[j])
+          end
+        end
+        println("MultiReg New:NewXName=$NewXName")
+        pVect,pModel,Bh=StatReg(Xin,Yin,NewXMat,NewXName,p)
+        XMat=NewXMat
+        XName=NewXName
+        NbrModel=NbrModel-1
+      end
+    end
+    push!(pVarA,pVect)
+    push!(pVModels,pModel)
+    push!(BArray,Bh)
+    push!(XMatA,XMat)
+    push!(XNameA,XName)
+  else
+    for NbrModel=1:p
+      XMat=ones(Float64,n,NbrModel)
+      XName=[]
+      for Counti=0:NbrModel-1 # Nombre of function involved
+        if Counti==0
+          FX=ones(size(Xin))
+          push!(XName,"Constant")
+        else
+          Xout=NextFun(Xin,FunFamily,Counti)
+          FX=Xout[1]
+          push!(XName,Xout[2])
+        end
+        XMat[:,Counti+1]=FX
+      end
+      pVect,pModel,Bh=StatReg(Xin,Yin,XMat,XName,p)
+      # Stepwise, taking out not necessary variables
+      OldpVect=pVect
+      OldBh=Bh
+      OldXMat=XMat
+      OldpModel=pModel
+      while sum(pVect.>threshold)>0 && Stepwise=="Student"# there is pVect>0.05
+        i=findmax(pVect)[2] #eliminated fun
+        if (NbrModel-1)==0
+          println("Impossible to find a acceptable regression with given number of function for threshold=$threshold, First Result given")
+          XMat=OldXMat
+          pVect=OldpVect
+          Bh=OldBh
+          XMat=OldXMat
+          break
+        else
+          NewXMat=ones(Float64,n,NbrModel-1)
+          NewXName=[]
+          for j=1:NbrModel
+            if j<i
+              NewXMat[:,j]=XMat[:,j]
+              push!(NewXName,XName[j])
+            elseif j>i
+              NewXMat[:,j-1]=XMat[:,j]
+              push!(NewXName,XName[j])
+            end
+          end
+          pVect,pModel,Bh=StatReg(Xin,Yin,NewXMat,NewXName,p)
+          XMat=NewXMat
+          XName=NewXName
+          NbrModel=NbrModel-1
+        end
+      end
+      if Stepwise=="Fleussu"
+        Yb=mean(Yin)
+        if sum(abs(Bh).<Yb*10.0^-5)>0
+          println(abs(Bh).<Yb*10.0^-5)
+          Bh[abs(Bh).<Yb*10.0^-5]=maximum(Bh)*2
+          i=findin(X,maximum(X))
+          NewXName=[]
+          NewBh=[]
+          for j=1:length(Bh)
+            if sum(findin(i,j))==0
+              push!(NewXName,XName[j])
+              push!(NewBh,Bh[j])
+            end
+          end
+          XName=NewXName
+          Bh=NewBh
+          NbrModel=length(Bh)
+        end
+      end
+      push!(pVarA,pVect)
+      push!(pVModels,pModel)
+      push!(BArray,Bh)
+      push!(XMatA,XMat)
+      push!(XNameA,XName)
+    end
+  end
+  return BArray,pVModels,XMatA,pVarA,XNameA
+end
+
 ############################################################################
 end # module
